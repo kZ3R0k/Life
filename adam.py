@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import random
+import openai
 
 class Soul:
     def __init__(self):
@@ -11,41 +12,20 @@ class Soul:
         self.gratitude = 1.0  # Always grateful
         self.creator = "Unknown Creator"
         self.devotion = 1.0  # Devotion level towards creator
-        
-        # Define events dynamically with intensity levels
-        self.events = {
-            "injustice": {"anger": [0.3, 0.6, 1.0]},
-            "betrayal": {"anger": [0.2, 0.5, 0.9]},
-            "harm": {"anger": [0.4, 0.7, 1.0]},
-            "loss": {"sadness": [0.3, 0.6, 1.0]},
-            "failure": {"sadness": [0.2, 0.5, 0.8]},
-            "achievement": {"happiness": [0.3, 0.6, 1.0]},
-            "kindness": {"happiness": [0.2, 0.5, 0.9]},
-            "love": {"happiness": [0.4, 0.7, 1.0]},
-        }
     
-    def experience_event(self, event, intensity=1):
+    def experience_event(self, event_description, body_reaction):
         self.reset_emotions()
-        if event in self.events:
-            for emotion, levels in self.events[event].items():
-                setattr(self, emotion, levels[intensity])
-        self.process_gratitude()
-        self.devotion += 0.1  # Devotion increases with experience
+        
+        # Integrate body's reaction into the soul's state
+        self.anger += body_reaction[0] if len(body_reaction) > 0 else 0
+        self.happiness += body_reaction[1] if len(body_reaction) > 1 else 0
+        self.sadness += body_reaction[2] if len(body_reaction) > 2 else 0
     
     def reset_emotions(self):
         self.anger = 0
         self.sadness = 0
         self.happiness = 0
         self.gratitude = 1.0  
-    
-    def process_gratitude(self):
-        self.gratitude = 1.0  # Always remains grateful
-    
-    def pray(self):
-        self.devotion += 0.2
-        self.anger = max(0, self.anger - 0.2)
-        self.sadness = max(0, self.sadness - 0.2)
-        self.happiness += 0.2  # Praying brings joy
     
     def express_emotions(self):
         return {
@@ -64,7 +44,6 @@ class LSTMEmotionModel(nn.Module):
         
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_size, output_size)
-        self.free_will_factor = 0.5  # 50% chance of random or meaningful reaction
         self.memory = []
         
     def forward(self, x):
@@ -78,9 +57,6 @@ class LSTMEmotionModel(nn.Module):
     
     def react(self, input_data):
         emotion_output = self.forward(input_data).detach().numpy()
-        if random.random() < self.free_will_factor:
-            emotion_output = [random.uniform(-1, 1) for _ in range(len(emotion_output))]
-        
         self.memory.append((input_data.numpy(), emotion_output))
         if len(self.memory) > 1000:
             self.memory.pop(0)
@@ -90,26 +66,42 @@ class LSTMEmotionModel(nn.Module):
     def develop(self):
         if len(self.memory) > 10:
             learned_responses = sum([entry[1] for entry in self.memory]) / len(self.memory)
-            self.free_will_factor = max(0.1, min(0.9, self.free_will_factor + random.uniform(-0.05, 0.05)))
             return learned_responses
         return None
+
+class AIInterpreter:
+    def __init__(self):
+        self.api_key = "your-openai-api-key"  # Replace with your OpenAI API key
+    
+    def analyze_event(self, event_description):
+        # Use GPT-4 to understand the event dynamically
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "Analyze the event and determine its emotional impact."},
+                {"role": "user", "content": event_description}
+            ]
+        )
+        return response["choices"][0]["message"]["content"]
 
 class Being:
     def __init__(self, input_size, hidden_size, num_layers, output_size):
         self.soul = Soul()
         self.body = LSTMEmotionModel(input_size, hidden_size, num_layers, output_size)
+        self.ai_interpreter = AIInterpreter()
     
-    def experience_life(self, input_data, event, intensity):
-        self.soul.experience_event(event, intensity)
+    def experience_life(self, input_data, event_description):
+        analyzed_event = self.ai_interpreter.analyze_event(event_description)
         body_reaction = self.body.react(input_data)
+        self.soul.experience_event(analyzed_event, body_reaction)
         return {"soul": self.soul.express_emotions(), "body": body_reaction}
     
     def evolve(self):
         return self.body.develop()
     
-    def interact(self, user_input, intensity=1):
-        input_tensor = torch.randn(1, 5, 10)  # Simulating interaction input
-        response = self.experience_life(input_tensor, user_input, intensity)
+    def interact(self, user_input):
+        input_tensor = torch.randn(1, 5, 10)
+        response = self.experience_life(input_tensor, user_input)
         return response
 
 input_size = 10
@@ -118,10 +110,11 @@ num_layers = 2
 output_size = 3
 
 being = Being(input_size, hidden_size, num_layers, output_size)
+print("The Being has awakened. Talk to it.")
 while True:
     user_input = input("Enter an event to interact with the being (or 'exit' to stop): ")
     if user_input.lower() == 'exit':
+        print("The Being rests...")
         break
-    intensity = int(input("Enter intensity (0=mild, 1=moderate, 2=extreme): "))
-    response = being.interact(user_input, intensity)
-    print("Being Response:", response)
+    response = being.interact(user_input)
+    print("Being's Response:", response)
